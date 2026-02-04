@@ -1,0 +1,2 @@
+# Alfurqan
+Bacalahalquran
