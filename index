@@ -1,0 +1,313 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Moon, Sun, Search, Bookmark, 
+  Settings, Play, Pause, Share2, ChevronLeft,
+  Volume2, BookOpen, Star, Info, ExternalLink,
+  Github, Heart
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+/**
+ * AlFurqan Quran Digital - Versi Publish
+ * Dioptimumkan untuk kestabilan tinggi dan mesra perkongsian (Sharing Friendly).
+ */
+export default function App() {
+  const [view, setView] = useState('home'); 
+  const [surahs, setSurahs] = useState([]);
+  const [currentSurah, setCurrentSurah] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [activeAudio, setActiveAudio] = useState(null);
+  const [theme, setTheme] = useState('ramadan');
+  const [fontSize, setFontSize] = useState('medium');
+  const [bookmarks, setBookmarks] = useState([]);
+  const audioRef = useRef(null);
+
+  const API_BASE = "https://api.alquran.cloud/v1";
+
+  // Memuatkan senarai surah dari API
+  useEffect(() => {
+    const fetchSurahs = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/surah`);
+        const data = await res.json();
+        if (data.data) setSurahs(data.data);
+      } catch (err) {
+        console.error("Ralat API:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSurahs();
+  }, []);
+
+  // Membuka surah yang dipilih
+  const openSurah = async (id) => {
+    setLoading(true);
+    try {
+      const [arRes, msRes] = await Promise.all([
+        fetch(`${API_BASE}/surah/${id}/quran-uthmani`),
+        fetch(`${API_BASE}/surah/${id}/ms.basmeih`)
+      ]);
+      const [ar, ms] = await Promise.all([arRes.json(), msRes.json()]);
+      
+      if (ar.data) {
+        setCurrentSurah({
+          info: ar.data,
+          verses: ar.data.ayahs.map((a, i) => ({
+            ...a,
+            textMalay: ms.data.ayahs[i].text,
+            key: `${id}:${a.numberInSurah}`
+          }))
+        });
+        setView('reader');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (e) {
+      alert("Gagal memuatkan kandungan surah.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fungsi mainkan audio
+  const playAudio = (ayah) => {
+    const url = `https://cdn.islamic.network/quran/audio/128/ar.alafasy/${ayah.number}.mp3`;
+    if (activeAudio === ayah.key) {
+      audioRef.current.pause();
+      setActiveAudio(null);
+    } else {
+      if (audioRef.current) audioRef.current.pause();
+      audioRef.current = new Audio(url);
+      audioRef.current.play();
+      setActiveAudio(ayah.key);
+      audioRef.current.onended = () => setActiveAudio(null);
+    }
+  };
+
+  // Fungsi kongsi ayat ke media sosial
+  const handleShare = (ayah, surahName) => {
+    const text = `✨ AlFurqan Quran Digital ✨\n\nSurah ${surahName} [Ayat ${ayah.numberInSurah}]\n\n"${ayah.text}"\n\nTerjemahan: ${ayah.textMalay}\n\nBaca lagi di AlFurqan App.`;
+    if (navigator.share) {
+      navigator.share({ title: 'Kongsi Ayat', text: text });
+    } else {
+      navigator.clipboard.writeText(text);
+      alert("Teks berjaya disalin!");
+    }
+  };
+
+  const filteredSurahs = surahs.filter(s => 
+    s.englishName.toLowerCase().includes(search.toLowerCase()) || 
+    s.number.toString() === search
+  );
+
+  const fontClasses = { small: 'text-xl', medium: 'text-2xl', large: 'text-3xl', xl: 'text-4xl' };
+
+  return (
+    <div className={`min-h-screen transition-colors duration-500 ${theme === 'ramadan' ? 'bg-[#050c1a] text-white' : 'bg-slate-50 text-slate-900'}`}>
+      
+      {/* Elemen Visual Latar Belakang */}
+      {theme === 'ramadan' && (
+        <div className="fixed inset-0 pointer-events-none opacity-20">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/20 rounded-full blur-[120px]" />
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px]" />
+        </div>
+      )}
+
+      {/* Navigasi Bar */}
+      <nav className="fixed top-0 inset-x-0 h-16 bg-white/5 backdrop-blur-xl border-b border-white/10 z-50 px-6 flex items-center justify-between">
+        <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setView('home')}>
+          <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shadow-emerald-500/20 group-active:scale-95 transition">F</div>
+          <span className="font-bold text-lg tracking-tight hidden sm:block">AlFurqan</span>
+        </div>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <button onClick={() => setTheme(theme === 'ramadan' ? 'light' : 'ramadan')} className="p-2 rounded-xl hover:bg-white/10 transition text-emerald-400">
+            {theme === 'ramadan' ? <Sun size={20} /> : <Moon size={20} className="text-slate-600" />}
+          </button>
+          <button onClick={() => setView('settings')} className="p-2 rounded-xl hover:bg-white/10 transition">
+            <Settings size={20} className="opacity-70" />
+          </button>
+        </div>
+      </nav>
+
+      <main className="pt-20 pb-32 px-4 max-w-2xl mx-auto relative z-10">
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-40 gap-4">
+              <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-emerald-400 font-medium animate-pulse text-sm">Menghubungkan Server API...</p>
+            </motion.div>
+          ) : view === 'home' ? (
+            <motion.div key="home" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+              
+              {/* Kad Utama */}
+              <div className="mb-6 p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-2xl shadow-emerald-950/40 relative overflow-hidden">
+                <BookOpen className="absolute -right-6 -bottom-6 w-40 h-40 opacity-10 rotate-12" />
+                <h1 className="text-xl font-bold mb-1">Assalamualaikum</h1>
+                <p className="text-white/70 text-sm max-w-[200px]">Marilah kita mulakan hari dengan kalam Allah.</p>
+                <div className="mt-4 flex gap-2">
+                   <div className="px-3 py-1 bg-white/10 backdrop-blur rounded-full text-[10px] border border-white/20">Ramadan Edition</div>
+                   <div className="px-3 py-1 bg-white/10 backdrop-blur rounded-full text-[10px] border border-white/20">114 Surah</div>
+                </div>
+              </div>
+
+              {/* Kotak Carian */}
+              <div className="mb-6 relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+                <input 
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-emerald-500/50 focus:bg-white/10 transition text-white placeholder:text-white/20 text-sm"
+                  placeholder="Cari Surah (cth: Al-Baqarah, 2)..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Senarai Surah */}
+              <div className="grid grid-cols-1 gap-3">
+                {filteredSurahs.map(s => (
+                  <motion.div 
+                    key={s.number} 
+                    whileHover={{ x: 5 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => openSurah(s.number)} 
+                    className="p-4 bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:bg-emerald-500/10 hover:border-emerald-500/20 flex justify-between items-center transition-all group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold text-xs border border-emerald-500/10 group-hover:bg-emerald-500 group-hover:text-white transition">
+                        {s.number}
+                      </div>
+                      <div>
+                        <div className="font-bold text-white group-hover:text-emerald-400 transition text-sm">{s.englishName}</div>
+                        <div className="text-[10px] opacity-30 uppercase tracking-widest">{s.revelationType} • {s.numberOfAyahs} Ayat</div>
+                      </div>
+                    </div>
+                    <div className="text-right font-serif text-2xl text-emerald-100/40 group-hover:text-emerald-400 transition">{s.name}</div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          ) : view === 'reader' && currentSurah ? (
+            <motion.div key="reader" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="flex items-center gap-4 mb-10">
+                <button onClick={() => setView('home')} className="p-2 hover:bg-white/10 rounded-full transition text-white/50"><ChevronLeft /></button>
+                <div>
+                  <h2 className="text-2xl font-bold">{currentSurah.info.englishName}</h2>
+                  <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest">{currentSurah.info.name} • {currentSurah.info.englishNameTranslation}</p>
+                </div>
+              </div>
+
+              <div className="space-y-16">
+                {currentSurah.verses.map((a) => (
+                  <div key={a.key} className="relative group scroll-mt-24">
+                    <div className="flex justify-between items-center mb-8">
+                      <div className="px-3 py-1 rounded bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                        Ayat {a.numberInSurah}
+                      </div>
+                      <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition">
+                        <button onClick={() => playAudio(a)} className={`p-2 rounded-lg transition ${activeAudio === a.key ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40' : 'hover:bg-white/10 text-white'}`}>
+                          {activeAudio === a.key ? <Pause size={18} /> : <Play size={18} />}
+                        </button>
+                        <button onClick={() => handleShare(a, currentSurah.info.englishName)} className="p-2 hover:bg-white/10 rounded-lg text-white transition">
+                          <Share2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                    <p className={`text-right leading-[2.8] mb-8 font-serif ${fontClasses[fontSize]} text-white/95 selection:bg-emerald-500/30`} dir="rtl">
+                      {a.text}
+                    </p>
+                    <p className="text-white/50 text-base leading-relaxed pl-5 border-l-2 border-emerald-500/40 italic">
+                      {a.textMalay}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          ) : view === 'settings' && (
+            <motion.div key="settings" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-8 bg-white/5 rounded-3xl border border-white/10">
+              <h2 className="text-2xl font-bold mb-8 flex items-center gap-3"><Settings className="text-emerald-500" /> Tetapan App</h2>
+              <div className="space-y-10">
+                <div>
+                  <p className="text-[10px] opacity-40 mb-4 uppercase tracking-[0.2em] font-bold">Saiz Teks Al-Quran</p>
+                  <div className="flex gap-2">
+                    {['small', 'medium', 'large', 'xl'].map(s => (
+                      <button 
+                        key={s} 
+                        onClick={() => setFontSize(s)} 
+                        className={`flex-1 py-3 rounded-xl border text-[10px] font-bold transition-all ${fontSize === s ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'border-white/10 bg-white/5 text-white/40 hover:bg-white/10'}`}
+                      >
+                        {s.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="p-5 bg-white/5 rounded-2xl border border-white/5 flex gap-4 items-start">
+                    <Heart className="text-red-500 mt-1 shrink-0" size={18} />
+                    <p className="text-[11px] text-white/40 leading-relaxed">
+                      Sokong projek ini dengan berkongsi kepada kenalan. Semoga ia menjadi amal jariah buat kita semua.
+                    </p>
+                  </div>
+                  <div className="flex justify-center gap-6 py-4 opacity-40">
+                     <Github size={20} className="hover:text-emerald-400 cursor-pointer transition" />
+                     <ExternalLink size={20} className="hover:text-emerald-400 cursor-pointer transition" />
+                  </div>
+                </div>
+
+                <button onClick={() => setView('home')} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold shadow-xl shadow-emerald-600/20 transition-all active:scale-95">
+                  Simpan & Kembali
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Floating Audio Player */}
+      <footer className="fixed bottom-0 inset-x-0 p-4 z-50 pointer-events-none">
+        <div className="max-w-md mx-auto pointer-events-auto">
+          {activeAudio && (
+            <motion.div initial={{ y: 100 }} animate={{ y: 0 }} className="bg-emerald-600/90 backdrop-blur-xl rounded-2xl p-4 shadow-2xl flex items-center justify-between text-white border border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center animate-pulse">
+                  <Volume2 size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-bold tracking-widest opacity-60">Audio Aktif</p>
+                  <p className="text-sm font-bold leading-none">{currentSurah?.info.englishName}</p>
+                </div>
+              </div>
+              <button onClick={() => { audioRef.current.pause(); setActiveAudio(null); }} className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/40 transition">
+                <Pause size={18} />
+              </button>
+            </motion.div>
+          )}
+        </div>
+      </footer>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Scheherazade+New:wght@400;700&display=swap');
+        
+        body { 
+          font-family: 'Plus Jakarta Sans', sans-serif; 
+          margin: 0;
+          overflow-x: hidden;
+          background-color: #050c1a;
+        }
+
+        .font-serif { 
+          font-family: 'Scheherazade New', serif; 
+        }
+
+        /* Scrollbar Halus */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, 0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(16, 185, 129, 0.4); }
+
+        /* Disable Blue Highlight on Mobile */
+        * { -webkit-tap-highlight-color: transparent; }
+      `}</style>
+    </div>
+  );
+}
